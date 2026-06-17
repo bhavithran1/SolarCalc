@@ -5,7 +5,14 @@ export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (t) => localStorage.setItem(TOKEN_KEY, t);
 export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
 
+const USE_MOCK = import.meta.env.PROD && !API_BASE;
+
 export async function api(path, { method = "GET", body, timeout = 12000 } = {}) {
+  if (USE_MOCK) {
+    const { mockApi } = await import("./mockApi.js");
+    return mockApi(path, { method, body, token: getToken() });
+  }
+
   const headers = { "Content-Type": "application/json" };
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;

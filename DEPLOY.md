@@ -1,3 +1,8 @@
+> **✅ Free demo mode (default):** With no backend configured, the live Pages site runs a built-in
+> in-browser backend (localStorage) so everything works for free — no server, no signup. Data is
+> per-browser. To switch to the real shared backend later, deploy `server/` (steps below) and set
+> `VITE_API_URL`.
+
 # Deploying SolarCalc
 
 This repo is a full-stack app:

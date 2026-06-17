@@ -84,7 +84,7 @@ export default function Calculator({ inputs, setInputs, onSave, saving, footer }
           </p>
           {onSave && (
             <button className="btn btn-primary btn-block mt-16" onClick={onSave} disabled={saving}>
-              {saving ? "Saving…" : "💾 Save this scenario"}
+              {saving ? "Saving…" : "Save this scenario"}
             </button>
           )}
         </div>

@@ -6,13 +6,14 @@ import { useToast } from "../components/Toast.jsx";
 import useDocumentTitle from "../lib/useDocumentTitle.js";
 import Calculator from "../components/Calculator.jsx";
 import Reveal from "../components/Reveal.jsx";
+import { DEFAULT_SOLAR_INPUTS } from "../lib/solar.js";
 
 export default function CalculatorPage() {
   useDocumentTitle("Calculator", "Adjust the sliders to match your home and see your solar payoff update live.");
   const { user } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
-  const [inputs, setInputs] = useState({ monthly_bill: 350, roof_area: 40, sun_hours: 4.5 });
+  const [inputs, setInputs] = useState(DEFAULT_SOLAR_INPUTS);
   const [saving, setSaving] = useState(false);
 
   const save = async () => {

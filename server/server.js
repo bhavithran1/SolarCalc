@@ -31,30 +31,53 @@ function auth(req, res, next) {
 
 // ---------- ROI engine (shared assumptions) ----------
 const TARIFF = 0.52;            // RM per kWh (Malaysia tiered average)
+const EXPORT_RATE = 0.08;       // RM per exported kWh, conservative planning value
 const PERFORMANCE_RATIO = 0.78; // real-world derating
 const KW_PER_M2 = 0.15;         // installable capacity per m² of roof
 const COST_PER_KW = 4000;       // RM installed
 const CO2_PER_KWH = 0.585;      // kg CO2e per kWh (grid factor)
 const PANEL_LIFETIME = 25;      // years
+const DEGRADATION_PCT = 0.5;
+const SELF_CONSUMPTION_PCT = 92;
+const valueOr = (value, fallback) => Number.isFinite(+value) ? +value : fallback;
 
-export function calculate({ monthly_bill, roof_area, sun_hours }) {
-  const bill = Math.max(0, +monthly_bill || 0);
-  const area = Math.max(0, +roof_area || 0);
-  const sun = Math.max(1, +sun_hours || 4.5);
+export function calculate({
+  monthly_bill,
+  roof_area,
+  sun_hours,
+  tariff = TARIFF,
+  cost_per_kw = COST_PER_KW,
+  performance_ratio = PERFORMANCE_RATIO,
+  self_consumption_pct = SELF_CONSUMPTION_PCT,
+  export_rate = EXPORT_RATE,
+  degradation_pct = DEGRADATION_PCT,
+}) {
+  const bill = Math.max(0, valueOr(monthly_bill, 0));
+  const area = Math.max(0, valueOr(roof_area, 0));
+  const sun = Math.max(1, valueOr(sun_hours, 4.5));
+  const energyRate = Math.max(0.01, valueOr(tariff, TARIFF));
+  const installRate = Math.max(1000, valueOr(cost_per_kw, COST_PER_KW));
+  const pr = Math.min(0.95, Math.max(0.55, valueOr(performance_ratio, PERFORMANCE_RATIO)));
+  const selfUse = Math.min(100, Math.max(0, valueOr(self_consumption_pct, SELF_CONSUMPTION_PCT))) / 100;
+  const exportCredit = Math.max(0, valueOr(export_rate, EXPORT_RATE));
+  const degradation = Math.min(2, Math.max(0, valueOr(degradation_pct, DEGRADATION_PCT))) / 100;
 
   // size system to roof, but never far beyond annual consumption need
-  const annualConsumptionKwh = (bill / TARIFF) * 12;
+  const annualConsumptionKwh = (bill / energyRate) * 12;
   const roofKw = area * KW_PER_M2;
-  const neededKw = annualConsumptionKwh / (sun * 365 * PERFORMANCE_RATIO);
+  const neededKw = annualConsumptionKwh / (sun * 365 * pr);
   const system_kw = +Math.min(roofKw, neededKw * 1.1).toFixed(2);
 
-  const annual_gen = system_kw * sun * 365 * PERFORMANCE_RATIO;
-  const offset_kwh = Math.min(annual_gen, annualConsumptionKwh);
-  const annual_savings = +(offset_kwh * TARIFF).toFixed(0);
-  const cost = +(system_kw * COST_PER_KW).toFixed(0);
+  const annual_gen = system_kw * sun * 365 * pr;
+  const self_consumed_kwh = Math.min(annual_gen * selfUse, annualConsumptionKwh);
+  const exported_kwh = Math.max(0, annual_gen - self_consumed_kwh);
+  const offset_kwh = Math.min(self_consumed_kwh, annualConsumptionKwh);
+  const annual_savings = +(self_consumed_kwh * energyRate + exported_kwh * exportCredit).toFixed(0);
+  const cost = +(system_kw * installRate).toFixed(0);
   const payback_years = annual_savings > 0 ? +(cost / annual_savings).toFixed(1) : 0;
   const co2_tonnes = +((annual_gen * CO2_PER_KWH) / 1000).toFixed(2);
-  const lifetime_savings = +(annual_savings * PANEL_LIFETIME - cost).toFixed(0);
+  const degradationFactor = 1 - degradation * ((PANEL_LIFETIME - 1) / 2);
+  const lifetime_savings = +(annual_savings * PANEL_LIFETIME * degradationFactor - cost).toFixed(0);
   const offset_pct = annualConsumptionKwh > 0 ? Math.min(100, Math.round((offset_kwh / annualConsumptionKwh) * 100)) : 0;
 
   return { system_kw, annual_gen: Math.round(annual_gen), annual_savings, cost, payback_years, co2_tonnes, lifetime_savings, offset_pct };
@@ -94,7 +117,7 @@ app.get("/api/scenarios", auth, (req, res) => {
 app.post("/api/scenarios", auth, (req, res) => {
   const { name, monthly_bill, roof_area, sun_hours } = req.body || {};
   if (!name) return res.status(400).json({ error: "Name your scenario" });
-  const r = calculate({ monthly_bill, roof_area, sun_hours });
+  const r = calculate(req.body || {});
   const info = db.prepare(`INSERT INTO scenarios (user_id,name,monthly_bill,roof_area,sun_hours,system_kw,cost,annual_savings,payback_years,co2_tonnes)
     VALUES (?,?,?,?,?,?,?,?,?,?)`)
     .run(req.user.id, name, monthly_bill, roof_area, sun_hours, r.system_kw, r.cost, r.annual_savings, r.payback_years, r.co2_tonnes);

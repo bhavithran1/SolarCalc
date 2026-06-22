@@ -58,7 +58,7 @@ export async function mockApi(rawPath, { method = "GET", body, token } = {}) {
     if (!me) err(401, "Not authenticated");
     const { name, monthly_bill, roof_area, sun_hours } = body || {};
     if (!name) err(400, "Name your scenario");
-    const r = calculate({ monthly_bill, roof_area, sun_hours });
+    const r = calculate(body || {});
     const s = { id: nextId(db), user_id: me.id, name, monthly_bill, roof_area, sun_hours, system_kw: r.system_kw, cost: r.cost, annual_savings: r.annual_savings, payback_years: r.payback_years, co2_tonnes: r.co2_tonnes, created_at: new Date().toISOString() };
     db.scenarios.push(s); save(db); return { scenario: s };
   }
